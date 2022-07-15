@@ -1,5 +1,6 @@
 import os
 import pandas
+import copy
 
 
 '''
@@ -11,7 +12,7 @@ import pandas
     raw_data：未经处理的数据
 '''
 def file_open(file_name):
-    file = open(file_name, encoding='utf-8')
+    file = open(file_name, encoding='utf-8-sig')
     lines = file.read().split("\n")
     raw_data = []
 
@@ -78,13 +79,15 @@ def data_management(raw_data,direction_list,file_type):
 函数功能：从pre_processed_data中读取数据，得到各个列表
 输入变量：
     pre_processed_data：预处理后的数据
+    step_size：步长
 输出变量：
     a_list：晶胞参数列表
     displacement_list：偏心距离列表
 '''
-def get_list(pre_processed_data):
+def get_list(pre_processed_data, step_size):
     a_list = []
     displacement_list = []
+    displace_step_list = []
 
     for item in pre_processed_data:
         if item[0] not in a_list:
@@ -92,7 +95,7 @@ def get_list(pre_processed_data):
         if item[2] not in displacement_list:
             displacement_list.append(item[2])
 
-    return a_list, displacement_list   
+    return a_list, displacement_list
 
 
 '''
@@ -107,8 +110,8 @@ def get_list(pre_processed_data):
 输出变量：
     contour：等高线图数据
 '''
-def contour_generation(pre_processed_data,step_size,a_list,direction_list,displacement_list):
-    contour = [['a','Displacement'],['A', str(step_size)+' A'],['','']]
+def contour_generation(pre_processed_data,step_size,a_list,direction_list,displacement_list,atom_number):
+    contour = [['a','Displacement'],['Å', 'Å'],['','']]
 
     for direction in direction_list:
         contour[0].append("Band Gap")
@@ -117,13 +120,10 @@ def contour_generation(pre_processed_data,step_size,a_list,direction_list,displa
 
     i = 0
     for item in pre_processed_data:
-        if item[1] == '100':
-            contour.append([item[0],item[2],item[3]])
+        if item[1] == direction_list[0]:
+            contour.append([item[0],int(item[2])*step_size/atom_number,item[3]])
         else:
-            if item[1] == '110':
-                val = 209
-            else:
-                val = 418
+            val = direction_list.index(item[1])*len(a_list)*len(displacement_list)
             contour[i-val+3].append(item[3])
         i = i + 1
     return contour
@@ -142,8 +142,8 @@ def contour_generation(pre_processed_data,step_size,a_list,direction_list,displa
 输出变量：
     plot_list：点线图数据
 '''
-def plot_generation(pre_processed_data,step_size,a_list,direction_list,displacement_list,file_type):
-    plot = [['Displacement'],[str(step_size) + ' A'],['']]
+def plot_generation(pre_processed_data,step_size,a_list,direction_list,displacement_list,file_type,atom_number):
+    plot = [['Displacement'],['Å'],['']]
     plot_list = []
 
     for a in a_list:
@@ -155,18 +155,15 @@ def plot_generation(pre_processed_data,step_size,a_list,direction_list,displacem
         plot[2].append(a)
 
     for displacement in displacement_list:
-        plot.append([displacement])
+        plot.append([int(displacement)*step_size/atom_number])
 
     for direction in direction_list:
-        plot_dir = plot[:]
+        plot_dir = copy.deepcopy(plot)
         for item in pre_processed_data:
             if item[1] == direction:
                 plot_dir[int(item[2])+3].append(item[3])
 
-        plot_int = []
-        for item in plot_dir:
-            plot_int.append(item[:len(a_list)+1])
-        plot_list.append(plot_int)
+        plot_list.append(plot_dir)
 
     return plot_list
 
@@ -214,12 +211,12 @@ def save_file(data_sets,data_type,file_name,direction_list):
         for data_set in data_sets:
             data = pandas.DataFrame(data=data_set)
             save_name = "./" + file_name[:-4] + "_" + direction_list[i] + ".csv"
-            data.to_csv(save_name, encoding='utf-8', header=0, index=0)
+            data.to_csv(save_name, encoding='utf-8-sig', header=0, index=0)
             i = i + 1
     elif data_type == 'single':
         data = pandas.DataFrame(data=data_sets)
         save_name = "./" + file_name[:-4] + ".csv"
-        data.to_csv(save_name, encoding='utf-8', header=0, index=0)
+        data.to_csv(save_name, encoding='utf-8-sig', header=0, index=0)
 
 
 '''
@@ -231,16 +228,16 @@ def save_file(data_sets,data_type,file_name,direction_list):
 输出变量：
     *.csv：输出到csv文件
 '''
-def to_band(file_name,step_size):
+def to_band(file_name,step_size,atom_number):
 
     file_type = 'band'
     raw_data = file_open(file_name)
     direction_list = get_direction_list(raw_data)
     pre_processed_data = data_management(raw_data, direction_list, file_type)
-    a_list,displacement_list = get_list(pre_processed_data)    
+    a_list,displacement_list = get_list(pre_processed_data, step_size)    
 
-    contour = contour_generation(pre_processed_data, step_size, a_list, direction_list, displacement_list)
-    plot_list = plot_generation(pre_processed_data, step_size, a_list, direction_list, displacement_list, file_type)
+    contour = contour_generation(pre_processed_data, step_size, a_list, direction_list, displacement_list, atom_number)
+    plot_list = plot_generation(pre_processed_data, step_size, a_list, direction_list, displacement_list, file_type, atom_number)
 
     save_file(contour, 'single', file_name, direction_list)
     save_file(plot_list, 'multi', file_name, direction_list)
@@ -255,15 +252,15 @@ def to_band(file_name,step_size):
 输出变量：
     *.csv：输出到csv文件
 '''
-def to_pes(file_name,step_size):
+def to_pes(file_name,step_size,atom_number):
 
     file_type = 'pes'
     raw_data = file_open(file_name)
     direction_list = get_direction_list(raw_data)
     pre_processed_data = data_management(raw_data, direction_list, file_type)
-    a_list,displacement_list = get_list(pre_processed_data)    
+    a_list,displacement_list = get_list(pre_processed_data, step_size)    
 
-    plot_list = plot_generation(pre_processed_data, step_size, a_list, direction_list, displacement_list, file_type)
+    plot_list = plot_generation(pre_processed_data, step_size, a_list, direction_list, displacement_list, file_type, atom_number)
     pes_list = pes_substraction(plot_list, direction_list)
 
     save_file(pes_list, 'multi', file_name, direction_list)
@@ -277,18 +274,25 @@ def to_pes(file_name,step_size):
 输出变量：
     *.csv：输出到csv文件
 '''
-def auto_run(step_size):
+def auto_run(step_size, atom_number):
     files = os.listdir("./")
+    print("==========START PROCESSING==========")
     for file in files:
         file_name = file
         if ".out" in file:
+            print("Now Processing: " + file_name)
             if "Band" in file:
-                to_band(file_name, step_size)
+                to_band(file_name, step_size, atom_number)
             elif "PES" in file:
-                to_pes(file_name, step_size)    
+                to_pes(file_name, step_size, atom_number)
+            print("Done!")
+    print("==========END PROCESSING==========")
 
 
 # 本程序会自动检测目录下所有的.out文件，并自动转换成.csv格式的输出文件，
-# 唯一需要指定的参数是步长，其余参数会自动从文件中读取。
+# 唯一需要指定的参数是步长和发生位移的B原子数量，其余参数会自动从文件中读取。
+# 请手动把文件里的A替换成A
 step_size = 0.06
-auto_run(step_size)
+atom_number = 1
+auto_run(step_size, atom_number)
+
